@@ -1,0 +1,20 @@
+name: Build IPA
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unzip & Build Unsigned IPA
+        run: |
+          unzip -o "*.zip"
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild clean build -project CarPlayMirrorBridge.xcodeproj -scheme CarPlayMirrorBridge -configuration Release -sdk iphoneos -derivedDataPath build_output CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir -p Payload
+          cp -r build_output/Build/Products/Release-iphoneos/CarPlayMirrorBridge.app Payload/
+          zip -r9 CarPlayMirrorBridge_Unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarPlayMirrorBridge_Unsigned_IPA
+          path: CarPlayMirrorBridge_Unsigned.ipa
