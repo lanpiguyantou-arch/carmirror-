@@ -1,20 +1,56 @@
-name: Build IPA
-on: [push, workflow_dispatch]
+
+name: Diagnose iOS Project
+
+on:
+  push:
+  workflow_dispatch:
+
 jobs:
-  build:
+  diagnose:
     runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Unzip & Build Unsigned IPA
+
+      - name: Check ZIP
         run: |
-          unzip -o "*.zip"
-          brew install xcodegen
+          ls -la
+          test -f CarPlayMirrorBridge_CloudBuild.zip
+
+      - name: Unzip project
+        run: |
+          mkdir -p source
+          unzip -o CarPlayMirrorBridge_CloudBuild.zip -d source
+          echo "===== Extracted files ====="
+          find source -maxdepth 4 -type f | sort | head -300
+
+      - name: Find Xcode project configuration
+        run: |
+          echo "===== project.yml ====="
+          find source -name project.yml -print
+          echo "===== Info.plist ====="
+          find source -name Info.plist -print
+          echo "===== Entitlements ====="
+          find source -name '*.entitlements' -print
+          echo "===== Xcode projects ====="
+          find source \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate and build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PROJECT_YML="$(find source -name project.yml -print -quit)"
+          if [ -z "$PROJECT_YML" ]; then
+            echo "ERROR: project.yml not found in ZIP"
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$PROJECT_YML")"
+          cd "$PROJECT_DIR"
+
           xcodegen generate
-          xcodebuild clean build -project CarPlayMirrorBridge.xcodeproj -scheme CarPlayMirrorBridge -configuration Release -sdk iphoneos -derivedDataPath build_output CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-          mkdir -p Payload
-          cp -r build_output/Build/Products/Release-iphoneos/CarPlayMirrorBridge.app Payload/
-          zip -r9 CarPlayMirrorBridge_Unsigned.ipa Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: CarPlayMirrorBridge_Unsigned_IPA
-          path: CarPlayMirrorBridge_Unsigned.ipa
+          xcodebuild -list -project CarPlayMirrorBridge.xcodeproj
